@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LED DGX Control</title>
+  <style>
+    :root { --ink:#18222a; --muted:#69747b; --paper:#f4f2ec; --panel:#fffefa; --line:#d8d7d0; --teal:#007d76; --teal-dark:#005e59; --lime:#b9dc39; --red:#d94b40; --shadow:0 16px 44px rgba(24,34,42,.10); }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); font-family:"Segoe UI","Trebuchet MS",sans-serif; }
+    button,input { font:inherit; }
+    .login { min-height:100vh; display:grid; place-items:center; padding:24px; background:repeating-linear-gradient(90deg,transparent 0 71px,rgba(24,34,42,.035) 72px),var(--paper); }
+    .login-card { width:min(420px,100%); padding:40px; background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); }
+    .mark { display:inline-grid; place-items:center; width:38px; height:38px; margin-bottom:25px; color:#fff; background:var(--teal); border-radius:10px; font-weight:700; font-size:19px; }
+    h1,h2,h3,p { margin-top:0; }
+    h1 { margin-bottom:8px; font-size:34px; font-weight:700; }
+    h2 { margin-bottom:20px; font-size:22px; font-weight:700; }
+    h3 { margin-bottom:4px; font-size:16px; }
+    .subtle { color:var(--muted); line-height:1.45; }
+    label { display:block; margin:19px 0 7px; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    input { width:100%; min-height:43px; padding:9px 11px; color:var(--ink); background:#fff; border:1px solid #bfc3bd; border-radius:8px; outline-color:var(--teal); }
+    .btn { min-height:42px; padding:9px 16px; cursor:pointer; color:#fff; border:1px solid var(--teal); border-radius:8px; background:var(--teal); font-size:13px; font-weight:700; }
+    .btn:hover { background:var(--teal-dark); }
+    .btn:disabled { cursor:not-allowed; opacity:.65; }
+    .login .btn { width:100%; margin-top:27px; }
+    .form-error { min-height:20px; margin:15px 0 0; color:var(--red); font-size:13px; }
+    .app { display:none; min-height:100vh; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; min-height:70px; padding:0 5vw; color:#fff; background:var(--ink); }
+    .brand { display:flex; align-items:center; gap:12px; font-size:14px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    .brand .mark { width:27px; height:27px; margin:0; color:var(--ink); background:var(--lime); font-size:14px; }
+    .logout { padding:7px 0; cursor:pointer; color:#e4e8e5; border:0; border-bottom:1px solid #9aa6a1; background:none; font-size:12px; }
+    main { width:min(1180px,90vw); margin:50px auto 70px; }
+    .page-head { display:flex; align-items:end; justify-content:space-between; gap:24px; margin-bottom:34px; }
+    .page-head h1 { margin-bottom:4px; }
+    .status { display:flex; align-items:center; gap:8px; color:var(--teal-dark); font-size:12px; font-weight:700; }
+    .dot { width:9px; height:9px; border-radius:50%; background:var(--lime); box-shadow:0 0 0 4px rgba(185,220,57,.25); }
+    .layout { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(250px,.8fr); gap:32px; }
+    .section-title { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .section-title h2 { margin:0; }
+    .icon-btn { width:32px; height:32px; cursor:pointer; color:var(--teal); border:1px solid var(--teal); border-radius:50%; background:transparent; font:24px/1 Arial,sans-serif; }
+    .icon-btn:hover { color:#fff; background:var(--teal); }
+    .strip-list { display:grid; gap:12px; }
+    .strip { display:grid; grid-template-columns:13px minmax(0,1fr) auto; gap:15px; align-items:center; padding:20px; background:var(--panel); border:1px solid var(--line); border-radius:10px; box-shadow:0 3px 10px rgba(24,34,42,.04); }
+    .strip-color { width:13px; min-height:72px; border-radius:7px; background:var(--strip-color); }
+    .strip-meta { display:flex; flex-wrap:wrap; gap:8px 18px; color:var(--muted); font-size:12px; }
+    .strip-meta b,.dgx-sources b { color:var(--ink); }
+    .dgx-sources { display:grid; gap:4px; margin-top:9px; color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
+    .strip-actions { display:flex; gap:8px; }
+    .small-btn { cursor:pointer; padding:7px 9px; color:var(--teal); border:1px solid #b2c8c5; border-radius:7px; background:#fff; font-size:12px; font-weight:700; }
+    .small-btn.delete { color:var(--red); border-color:#e6bbb6; }
+    .settings { align-self:start; padding:25px; background:#e6ece7; border-top:4px solid var(--teal); border-radius:10px; }
+    .settings label:first-of-type { margin-top:0; }
+    .save-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:16px; margin-top:34px; padding:20px 0 0; border-top:1px solid var(--line); }
+    .save-row .btn { min-width:120px; justify-self:end; }
+    .save-hint { margin:0; color:var(--muted); font-size:13px; }
+    .save-hint[hidden] { visibility:hidden; }
+    .empty { padding:26px; color:var(--muted); text-align:center; border:1px dashed #b8beb7; border-radius:10px; }
+    .modal-backdrop { display:none; position:fixed; inset:0; z-index:3; place-items:center; padding:20px; background:rgba(24,34,42,.55); }
+    .modal { width:min(600px,100%); padding:29px; background:var(--panel); border-radius:12px; box-shadow:var(--shadow); }
+    .modal-head { display:flex; align-items:center; justify-content:space-between; }
+    .modal-head h2 { margin:0; }
+    .close { width:32px; height:32px; cursor:pointer; border:0; background:transparent; font-size:25px; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:25px; }
+    .secondary { color:var(--ink); border-color:#aeb6b0; background:transparent; }
+    .notice { position:fixed; right:24px; bottom:24px; z-index:5; display:none; max-width:min(380px,calc(100vw - 48px)); padding:13px 16px; color:#fff; background:var(--ink); border-radius:8px; box-shadow:var(--shadow); font-size:13px; }
+    @media (max-width:760px) { .layout { grid-template-columns:1fr; } main { margin-top:34px; } .page-head { align-items:start; flex-direction:column; gap:12px; } .strip { grid-template-columns:10px minmax(0,1fr); } .strip-color { width:10px; } .strip-actions { grid-column:2; } }
+  </style>
+</head>
+<body>
+  <section class="login" id="loginView">
+    <form class="login-card" id="loginForm">
+      <div class="mark">L</div>
+      <h1>LED DGX Control</h1>
+      <p class="subtle">Sign in to manage the controller, LED strips, and DGX sources.</p>
+      <label for="username">Username</label><input id="username" autocomplete="username" required>
+      <label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required>
+      <button class="btn" type="submit">Sign in</button>
+      <p class="form-error" id="loginError" role="alert"></p>
+    </form>
+  </section>
+  <div class="app" id="appView">
+    <header class="topbar"><div class="brand"><span class="mark">L</span> LED DGX Control</div><button class="logout" id="logout">Sign out</button></header>
+    <main>
+      <div class="page-head"><div><h1>Installation</h1><p class="subtle">LED strips with up to two assigned DGX Spark status sources</p></div><div class="status"><span class="dot"></span><span id="connectionStatus">Controller connected</span></div></div>
+      <div class="layout">
+        <section><div class="section-title"><h2>LED Strips</h2><button class="icon-btn" id="addStrip" title="Add LED strip" aria-label="Add LED strip">+</button></div><div class="strip-list" id="stripList"></div><div class="empty" id="emptyState">No LED strips configured yet.</div></section>
+        <aside class="settings"><h2>Global</h2><label for="fetch">Polling interval (sec.)</label><input id="fetch" type="number" value="5" min="1" max="3600" required></aside>
+      </div>
+      <div class="save-row"><p class="save-hint" id="unsavedHint" hidden>Unsaved changes</p><button class="btn" id="saveSettings" type="button" disabled>Save</button></div>
+    </main>
+  </div>
+  <div class="modal-backdrop" id="modalBackdrop">
+    <form class="modal" id="stripForm">
+      <div class="modal-head"><h2 id="modalTitle">Add LED Strip</h2><button class="close" type="button" id="closeModal" aria-label="Close">x</button></div>
+      <label for="stripName">Name</label><input id="stripName" maxlength="32" placeholder="e.g. Rack A" required>
+      <label for="dataPin">Data pin</label><input id="dataPin" type="number" value="16" min="0" max="33" required>
+      <label for="dgxUrlA">DGX Spark 1 DCGM-URL (optional)</label><input id="dgxUrlA" type="url" maxlength="160" placeholder="http://dgx-spark-1.local:9400/metrics">
+      <label for="dgxUrlB">DGX Spark 2 DCGM-URL (optional)</label><input id="dgxUrlB" type="url" maxlength="160" placeholder="http://dgx-spark-2.local:9400/metrics">
+      <p class="form-error" id="stripError" role="alert"></p>
+      <div class="modal-actions"><button class="btn secondary" type="button" id="cancelModal">Cancel</button><button class="btn" type="submit" id="saveStrip">OK</button></div>
+    </form>
+  </div>
+  <div class="notice" id="notice" role="status"></div>
+  <script>
+    const loginView = document.getElementById('loginView');
+    const appView = document.getElementById('appView');
+    const stripList = document.getElementById('stripList');
+    const emptyState = document.getElementById('emptyState');
+    const backdrop = document.getElementById('modalBackdrop');
+    const stripForm = document.getElementById('stripForm');
+    const saveSettings = document.getElementById('saveSettings');
+    const unsavedHint = document.getElementById('unsavedHint');
+    let configuration = null;
+    let editingIndex = null;
+    let noticeTimeout = null;
+    let hasUnsavedChanges = false;
+    let savedConfigurationJson = '';
+    const isMockup = new URLSearchParams(location.search).has('mockup');
+
+    function escapeHtml(value) { const element = document.createElement('div'); element.textContent = value; return element.innerHTML; }
+    function showNotice(message) { const notice = document.getElementById('notice'); notice.textContent = message; notice.style.display = 'block'; clearTimeout(noticeTimeout); noticeTimeout = setTimeout(() => { notice.style.display = 'none'; }, 3600); }
+    function showLogin(error = '') { appView.style.display = 'none'; loginView.style.display = 'grid'; document.getElementById('loginError').textContent = error; }
+    async function api(path, options = {}) {
+      const response = await fetch(path, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'The request could not be completed.');
+      return data;
+    }
+    function renderStrips() {
+      const colors = ['#007d76', '#83a92b', '#d58342', '#3d75a8', '#b84d52', '#6e7e54', '#8b6199', '#ba8d32'];
+      stripList.innerHTML = configuration.strips.map((strip, index) => `<article class="strip" style="--strip-color:${colors[index % colors.length]}"><div class="strip-color"></div><div><h3>${escapeHtml(strip.name)}</h3><div class="strip-meta"><span>Data pin <b>${strip.dataPin}</b></span><span><b>2</b> DGX Sparks</span></div><div class="dgx-sources"><span><b>DGX Spark 1:</b> ${escapeHtml(strip.dgxUrls[0])}</span><span><b>DGX Spark 2:</b> ${escapeHtml(strip.dgxUrls[1])}</span></div></div><div class="strip-actions"><button class="small-btn" data-edit="${index}">Edit</button><button class="small-btn delete" data-delete="${index}">Delete</button></div></article>`).join('');
+      emptyState.style.display = configuration.strips.length ? 'none' : 'block';
+    }
+    function setUnsavedChanges(value) {
+      hasUnsavedChanges = value;
+      saveSettings.disabled = !value;
+      unsavedHint.hidden = !value;
+    }
+    function configurationJson() {
+      return JSON.stringify({ ...configuration, fetchIntervalSeconds: Number(document.getElementById('fetch').value) });
+    }
+    function updateUnsavedChanges() { setUnsavedChanges(configurationJson() !== savedConfigurationJson); }
+    async function loadConfiguration() {
+      const [config, status] = await Promise.all([api('/api/config'), api('/api/status')]);
+      configuration = config;
+      document.getElementById('fetch').value = config.fetchIntervalSeconds;
+      document.getElementById('connectionStatus').textContent = status.wifiConnected ? `Controller connected (${status.activeZoneCount} zones)` : 'Controller offline';
+      renderStrips();
+      savedConfigurationJson = configurationJson();
+      updateUnsavedChanges();
+    }
+    async function saveConfiguration(button) {
+      const interval = Number(document.getElementById('fetch').value);
+      if (!Number.isInteger(interval) || interval < 1 || interval > 3600) throw new Error('The polling interval must be between 1 and 3600 seconds.');
+      configuration.fetchIntervalSeconds = interval;
+      if (!confirm('The configuration will be uploaded to the controller. The ESP32 will restart afterwards. Continue?')) return;
+      button.disabled = true;
+      try {
+        if (!isMockup) await api('/api/config', { method: 'POST', body: JSON.stringify(configuration) });
+        backdrop.style.display = 'none';
+        savedConfigurationJson = configurationJson();
+        updateUnsavedChanges();
+        showNotice('Configuration saved. The controller is restarting.');
+        setTimeout(() => showLogin('Controller restarted. Please sign in again.'), 900);
+      } finally { button.disabled = false; }
+    }
+    function openModal(index) {
+      editingIndex = index;
+      const strip = configuration.strips[index];
+      document.getElementById('modalTitle').textContent = strip ? 'Edit LED Strip' : 'Add LED Strip';
+      document.getElementById('stripName').value = strip ? strip.name : '';
+      document.getElementById('dataPin').value = strip ? strip.dataPin : 16;
+      document.getElementById('dgxUrlA').value = strip ? strip.dgxUrls[0] : '';
+      document.getElementById('dgxUrlB').value = strip ? strip.dgxUrls[1] : '';
+      document.getElementById('stripError').textContent = '';
+      backdrop.style.display = 'grid';
+    }
+    function closeModal() { backdrop.style.display = 'none'; }
+    document.getElementById('loginForm').addEventListener('submit', async event => {
+      event.preventDefault(); const button = event.currentTarget.querySelector('button'); const error = document.getElementById('loginError');
+      button.disabled = true; error.textContent = '';
+      try { await api('/api/login', { method: 'POST', body: JSON.stringify({ username: document.getElementById('username').value, password: document.getElementById('password').value }) }); loginView.style.display = 'none'; appView.style.display = 'block'; await loadConfiguration(); }
+      catch (reason) { error.textContent = reason.message; } finally { button.disabled = false; }
+    });
+    document.getElementById('addStrip').addEventListener('click', () => openModal(null));
+    document.getElementById('closeModal').addEventListener('click', closeModal);
+    document.getElementById('cancelModal').addEventListener('click', closeModal);
+    saveSettings.addEventListener('click', async event => { try { await saveConfiguration(event.currentTarget); } catch (reason) { showNotice(reason.message); } });
+    document.getElementById('fetch').addEventListener('input', updateUnsavedChanges);
+    stripList.addEventListener('click', event => {
+      const { edit, delete: deleteIndex } = event.target.dataset;
+      if (edit !== undefined) openModal(Number(edit));
+      if (deleteIndex !== undefined && confirm('Delete this LED strip?')) { configuration.strips.splice(Number(deleteIndex), 1); renderStrips(); updateUnsavedChanges(); }
+    });
+    stripForm.addEventListener('submit', event => {
+      event.preventDefault(); const error = document.getElementById('stripError');
+      if (configuration.strips.length >= 8 && editingIndex === null) { error.textContent = 'A maximum of eight LED strips is supported.'; return; }
+      const strip = { name: document.getElementById('stripName').value.trim(), dataPin: Number(document.getElementById('dataPin').value), dgxUrls: [document.getElementById('dgxUrlA').value.trim(), document.getElementById('dgxUrlB').value.trim()] };
+      if (editingIndex === null) configuration.strips.push(strip); else configuration.strips[editingIndex] = strip;
+      backdrop.style.display = 'none'; renderStrips(); updateUnsavedChanges();
+    });
+    window.addEventListener('beforeunload', event => { if (hasUnsavedChanges) { event.preventDefault(); event.returnValue = ''; } });
+    document.getElementById('logout').addEventListener('click', async () => { if (hasUnsavedChanges && !confirm('Unsaved changes will be lost when signing out. Sign out anyway?')) return; try { await api('/api/logout', { method: 'POST' }); } finally { setUnsavedChanges(false); showLogin(); } });
+    if (isMockup) {
+      configuration = { fetchIntervalSeconds: 5, strips: [{ name: 'Rack A', dataPin: 16, dgxUrls: ['http://dgx-spark-1.local:9400/metrics', 'http://dgx-spark-2.local:9400/metrics'] }, { name: 'Rack B', dataPin: 17, dgxUrls: ['http://10.0.0.21:9400/metrics', 'http://10.0.0.22:9400/metrics'] }] };
+      loginView.style.display = 'none'; appView.style.display = 'block'; document.getElementById('fetch').value = configuration.fetchIntervalSeconds; renderStrips(); savedConfigurationJson = configurationJson(); updateUnsavedChanges();
+    } else api('/api/session').then(() => { loginView.style.display = 'none'; appView.style.display = 'block'; return loadConfiguration(); }).catch(() => showLogin());
+  </script>
+</body>
+</html>
