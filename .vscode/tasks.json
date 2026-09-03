@@ -1,0 +1,18 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "PlatformIO: Upload Firmware and Web UI",
+            "type": "shell",
+            "command": "& \"${env:USERPROFILE}\\.platformio\\penv\\Scripts\\platformio.exe\" run --target upload; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & \"${env:USERPROFILE}\\.platformio\\penv\\Scripts\\platformio.exe\" run --target uploadfs; exit $LASTEXITCODE",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}

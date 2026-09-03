@@ -62,19 +62,20 @@ Up to eight LED strips are supported.
    WEBUI_PASSWORD="Secure-Password"
    ```
 
-2. Build and upload the firmware to the ESP32:
+2. In VS Code, run the default build task to upload the firmware and web interface to the ESP32:
+
+   ```bash
+   Ctrl+Shift+B
+   ```
+
+   From a terminal, run the two targets in sequence instead:
 
    ```bash
    platformio run --target upload
-   ```
-
-3. Upload the web interface from `data/` to LittleFS:
-
-   ```bash
    platformio run --target uploadfs
    ```
 
-4. Open the serial monitor and browse to the printed IP address:
+3. Open the serial monitor and browse to the printed IP address:
 
    ```bash
    platformio device monitor
