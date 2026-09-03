@@ -20,7 +20,7 @@ docker run -d \
   --cap-add SYS_ADMIN \
   -p 9400:9400 \
   nvcr.io/nvidia/k8s/dcgm-exporter:4.6.0-4.8.3-distroless \
-  --collect-interval 5s
+  --collect-interval 5000
 ```
 
 The exporter exposes its metrics at:
