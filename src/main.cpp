@@ -26,9 +26,11 @@ CRGB stripPixels[MAX_LED_STRIPS][LEDS_PER_STRIP] = {};
 bool configuredOutputs[MAX_LED_STRIPS] = {};
 uint8_t zoneUtilizations[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP] = {};
 uint16_t runningZonePhases[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP] = {};
+uint8_t configuredStripCount = 0;
 unsigned long lastStatusRefresh = 0;
 unsigned long lastAnimationPhaseUpdate = 0;
 bool statusRefreshDue = true;
+portMUX_TYPE zoneUtilizationsMux = portMUX_INITIALIZER_UNLOCKED;
 
 bool configureOutputForPin(uint8_t dataPin, CRGB* pixels) {
     // FastLED requires compile-time pin values, so supported GPIOs are enumerated here.
@@ -67,6 +69,7 @@ void beginStripOutputs() {
         }
     }
     FastLED.clear(true);
+    configuredStripCount = appConfig.stripCount;
 }
 
 void fillZone(CRGB* pixels, uint8_t zoneIndex, const CRGB& color) {
@@ -89,7 +92,7 @@ uint16_t runningZoneSpeed(uint8_t utilization) {
     return static_cast<uint16_t>(map(constrain(utilization, 1, 100), 1, 100, RUNNING_BASE_SPEED, RUNNING_TOP_SPEED));
 }
 
-void updateRunningZonePhases(unsigned long now) {
+void updateRunningZonePhases(unsigned long now, const uint8_t utilizations[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP]) {
     // Advance only active zones; the uint16_t phase intentionally wraps every cycle.
     const unsigned long elapsedMs = now - lastAnimationPhaseUpdate;
     lastAnimationPhaseUpdate = now;
@@ -97,9 +100,9 @@ void updateRunningZonePhases(unsigned long now) {
         return;
     }
 
-    for (uint8_t stripIndex = 0; stripIndex < appConfig.stripCount; stripIndex++) {
+    for (uint8_t stripIndex = 0; stripIndex < configuredStripCount; stripIndex++) {
         for (uint8_t zoneIndex = 0; zoneIndex < DGX_SPARKS_PER_STRIP; zoneIndex++) {
-            const uint8_t utilization = zoneUtilizations[stripIndex][zoneIndex];
+            const uint8_t utilization = utilizations[stripIndex][zoneIndex];
             if (utilization == OFFLINE_UTILIZATION || utilization == 0) {
                 continue;
             }
@@ -142,14 +145,14 @@ void renderRunningZone(CRGB* pixels, uint8_t zoneIndex, uint8_t utilization, uin
     }
 }
 
-void renderLedOutputs() {
-    for (uint8_t stripIndex = 0; stripIndex < appConfig.stripCount; stripIndex++) {
+void renderLedOutputs(const uint8_t utilizations[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP]) {
+    for (uint8_t stripIndex = 0; stripIndex < configuredStripCount; stripIndex++) {
         if (!configuredOutputs[stripIndex]) {
             continue;
         }
 
         for (uint8_t zoneIndex = 0; zoneIndex < DGX_SPARKS_PER_STRIP; zoneIndex++) {
-            const uint8_t utilization = zoneUtilizations[stripIndex][zoneIndex];
+            const uint8_t utilization = utilizations[stripIndex][zoneIndex];
             if (utilization == OFFLINE_UTILIZATION) {
                 fillZone(stripPixels[stripIndex], zoneIndex, CRGB::Black);
             } else if (utilization <= IDLE_UTILIZATION_MAX) {
@@ -241,25 +244,56 @@ uint8_t createExampleUtilization() {
 }
 
 void refreshZoneUtilizations() {
+    uint8_t refreshedUtilizations[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP] = {};
     if (RUN_WITH_EXAMPLE_VALUES) {
         // Keep unconfigured zones offline while exercising each display state.
         for (uint8_t stripIndex = 0; stripIndex < appConfig.stripCount; stripIndex++) {
             for (uint8_t dgxIndex = 0; dgxIndex < DGX_SPARKS_PER_STRIP; dgxIndex++) {
                 const char* url = appConfig.strips[stripIndex].dgxUrls[dgxIndex];
-                zoneUtilizations[stripIndex][dgxIndex] = url[0] == '\0' ? OFFLINE_UTILIZATION : createExampleUtilization();
+                refreshedUtilizations[stripIndex][dgxIndex] = url[0] == '\0' ? OFFLINE_UTILIZATION : createExampleUtilization();
             }
         }
-        return;
+    } else {
+        for (uint8_t stripIndex = 0; stripIndex < appConfig.stripCount; stripIndex++) {
+            for (uint8_t dgxIndex = 0; dgxIndex < DGX_SPARKS_PER_STRIP; dgxIndex++) {
+                uint8_t utilization = 0;
+                const char* url = appConfig.strips[stripIndex].dgxUrls[dgxIndex];
+                refreshedUtilizations[stripIndex][dgxIndex] = url[0] != '\0' && fetchDgxUtilization(url, utilization)
+                    ? utilization
+                    : OFFLINE_UTILIZATION;
+            }
+        }
     }
 
-    for (uint8_t stripIndex = 0; stripIndex < appConfig.stripCount; stripIndex++) {
-        for (uint8_t dgxIndex = 0; dgxIndex < DGX_SPARKS_PER_STRIP; dgxIndex++) {
-            uint8_t utilization = 0;
-            const char* url = appConfig.strips[stripIndex].dgxUrls[dgxIndex];
-            zoneUtilizations[stripIndex][dgxIndex] = url[0] != '\0' && fetchDgxUtilization(url, utilization)
-                ? utilization
-                : OFFLINE_UTILIZATION;
+    portENTER_CRITICAL(&zoneUtilizationsMux);
+    memcpy(zoneUtilizations, refreshedUtilizations, sizeof(zoneUtilizations));
+    portEXIT_CRITICAL(&zoneUtilizationsMux);
+}
+
+void runNetworkTask(void*) {
+    beginWebUi(appConfig);
+    beginSerialCli(appConfig, zoneUtilizations, RUN_WITH_EXAMPLE_VALUES);
+
+    for (;;) {
+        handleWebUi();
+        handleSerialCli();
+        if (webUiRestartRequested() || serialCliRestartRequested()) {
+            ESP.restart();
         }
+
+        if (serialCliRefreshRequested()) {
+            statusRefreshDue = true;
+        }
+
+        const unsigned long now = millis();
+        const unsigned long refreshIntervalMs = static_cast<unsigned long>(appConfig.fetchIntervalSeconds) * 1000UL;
+        if (statusRefreshDue || now - lastStatusRefresh >= refreshIntervalMs) {
+            refreshZoneUtilizations();
+            lastStatusRefresh = now;
+            statusRefreshDue = false;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
@@ -268,32 +302,17 @@ void setup() {
     randomSeed(esp_random());
     loadAppConfig(appConfig);
     beginStripOutputs();
-    beginWebUi(appConfig);
-    beginSerialCli(appConfig, zoneUtilizations, RUN_WITH_EXAMPLE_VALUES);
     lastAnimationPhaseUpdate = millis();
+    xTaskCreatePinnedToCore(runNetworkTask, "Network", 8192, nullptr, 1, nullptr, 0);
 }
 
 void loop() {
-    // Keep control surfaces responsive while rendering between metric refreshes.
-    handleWebUi();
-    handleSerialCli();
-    if (webUiRestartRequested() || serialCliRestartRequested()) {
-        ESP.restart();
-    }
+    uint8_t animationUtilizations[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP];
+    portENTER_CRITICAL(&zoneUtilizationsMux);
+    memcpy(animationUtilizations, zoneUtilizations, sizeof(animationUtilizations));
+    portEXIT_CRITICAL(&zoneUtilizationsMux);
 
-    if (serialCliRefreshRequested()) {
-        statusRefreshDue = true;
-    }
-
-    const unsigned long now = millis();
-    const unsigned long refreshIntervalMs = static_cast<unsigned long>(appConfig.fetchIntervalSeconds) * 1000UL;
-    if (statusRefreshDue || now - lastStatusRefresh >= refreshIntervalMs) {
-        refreshZoneUtilizations();
-        lastStatusRefresh = now;
-        statusRefreshDue = false;
-    }
-
-    updateRunningZonePhases(millis());
-    renderLedOutputs();
+    updateRunningZonePhases(millis(), animationUtilizations);
+    renderLedOutputs(animationUtilizations);
     delay(10);
 }
