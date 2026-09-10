@@ -13,6 +13,7 @@
 
 constexpr uint8_t OFFLINE_UTILIZATION = 255;
 constexpr uint8_t IDLE_UTILIZATION_MAX = 5;
+constexpr uint8_t MAX_CONSECUTIVE_FETCH_FAILURES = 5;
 constexpr uint16_t HTTP_TIMEOUT_MS = 4000;
 constexpr char GPU_UTILIZATION_METRIC[] = "DCGM_FI_DEV_GPU_UTIL";
 constexpr uint16_t RUNNING_BASE_SPEED = 60;
@@ -25,6 +26,7 @@ AppConfig appConfig;
 CRGB stripPixels[MAX_LED_STRIPS][LEDS_PER_STRIP] = {};
 bool configuredOutputs[MAX_LED_STRIPS] = {};
 uint8_t zoneUtilizations[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP] = {};
+uint8_t consecutiveFetchFailures[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP] = {};
 uint16_t runningZonePhases[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP] = {};
 uint8_t configuredStripCount = 0;
 unsigned long lastStatusRefresh = 0;
@@ -257,6 +259,10 @@ uint8_t createExampleUtilization() {
 
 void refreshZoneUtilizations() {
     uint8_t refreshedUtilizations[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP] = {};
+    portENTER_CRITICAL(&zoneUtilizationsMux);
+    memcpy(refreshedUtilizations, zoneUtilizations, sizeof(refreshedUtilizations));
+    portEXIT_CRITICAL(&zoneUtilizationsMux);
+
     if (RUN_WITH_EXAMPLE_VALUES) {
         // Keep unconfigured zones offline while exercising each display state.
         for (uint8_t stripIndex = 0; stripIndex < appConfig.stripCount; stripIndex++) {
@@ -270,9 +276,13 @@ void refreshZoneUtilizations() {
             for (uint8_t dgxIndex = 0; dgxIndex < DGX_SPARKS_PER_STRIP; dgxIndex++) {
                 uint8_t utilization = 0;
                 const char* url = appConfig.strips[stripIndex].dgxUrls[dgxIndex];
-                refreshedUtilizations[stripIndex][dgxIndex] = url[0] != '\0' && fetchDgxUtilization(url, utilization)
-                    ? utilization
-                    : OFFLINE_UTILIZATION;
+                if (url[0] != '\0' && fetchDgxUtilization(url, utilization)) {
+                    refreshedUtilizations[stripIndex][dgxIndex] = utilization;
+                    consecutiveFetchFailures[stripIndex][dgxIndex] = 0;
+                } else if (url[0] == '\0' ||
+                           ++consecutiveFetchFailures[stripIndex][dgxIndex] >= MAX_CONSECUTIVE_FETCH_FAILURES) {
+                    refreshedUtilizations[stripIndex][dgxIndex] = OFFLINE_UTILIZATION;
+                }
             }
         }
     }
