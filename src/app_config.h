@@ -4,8 +4,8 @@
 
 constexpr uint8_t MAX_LED_STRIPS = 8;
 constexpr uint8_t DGX_SPARKS_PER_STRIP = 2;
-constexpr uint16_t LEDS_PER_ZONE = 13;
-constexpr uint16_t LEDS_PER_STRIP = LEDS_PER_ZONE * DGX_SPARKS_PER_STRIP;
+constexpr uint16_t LEDS_PER_STRIP = 23;
+constexpr uint16_t LEDS_PER_ZONE = LEDS_PER_STRIP / DGX_SPARKS_PER_STRIP;
 constexpr uint16_t APP_CONFIG_VERSION = 1;
 constexpr size_t STRIP_NAME_LENGTH = 32;
 constexpr size_t DGX_URL_LENGTH = 160;

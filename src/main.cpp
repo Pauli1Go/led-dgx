@@ -72,17 +72,28 @@ void beginStripOutputs() {
     configuredStripCount = appConfig.stripCount;
 }
 
+uint16_t zoneOffset(uint8_t zoneIndex) {
+    const bool hasCenterLed = LEDS_PER_STRIP % 2 != 0;
+    return (zoneIndex * LEDS_PER_ZONE) + (hasCenterLed && zoneIndex > 0 ? 1 : 0);
+}
+
 void fillZone(CRGB* pixels, uint8_t zoneIndex, const CRGB& color) {
-    const uint16_t offset = zoneIndex * LEDS_PER_ZONE;
+    const uint16_t offset = zoneOffset(zoneIndex);
     for (uint16_t pixelIndex = 0; pixelIndex < LEDS_PER_ZONE; pixelIndex++) {
         pixels[offset + pixelIndex] = color;
+    }
+}
+
+void clearStripCenterLed(CRGB* pixels) {
+    if (LEDS_PER_STRIP % 2 != 0) {
+        pixels[LEDS_PER_STRIP / 2] = CRGB::Black;
     }
 }
 
 void renderIdleZone(CRGB* pixels, uint8_t zoneIndex) {
     const uint8_t idlePulse = beatsin8(20, 5, 255);
     fillZone(pixels, zoneIndex, CRGB::Blue);
-    const uint16_t offset = zoneIndex * LEDS_PER_ZONE;
+    const uint16_t offset = zoneOffset(zoneIndex);
     for (uint16_t pixelIndex = 0; pixelIndex < LEDS_PER_ZONE; pixelIndex++) {
         pixels[offset + pixelIndex].nscale8_video(idlePulse);
     }
@@ -129,7 +140,7 @@ void renderRunningZone(CRGB* pixels, uint8_t zoneIndex, uint8_t utilization, uin
 
     const uint8_t position = triwave8(static_cast<uint8_t>(phase >> 8));
     const uint8_t ledPosition = map(position, 0, 255, 0, LEDS_PER_ZONE - 1);
-    const uint16_t offset = zoneIndex * LEDS_PER_ZONE;
+    const uint16_t offset = zoneOffset(zoneIndex);
 
     for (uint16_t pixelIndex = 0; pixelIndex < LEDS_PER_ZONE; pixelIndex++) {
         const uint16_t distance = pixelIndex > ledPosition ? pixelIndex - ledPosition : ledPosition - pixelIndex;
@@ -161,6 +172,7 @@ void renderLedOutputs(const uint8_t utilizations[MAX_LED_STRIPS][DGX_SPARKS_PER_
                 renderRunningZone(stripPixels[stripIndex], zoneIndex, utilization, runningZonePhases[stripIndex][zoneIndex]);
             }
         }
+        clearStripCenterLed(stripPixels[stripIndex]);
     }
     FastLED.show();
 }
