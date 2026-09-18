@@ -68,7 +68,7 @@ Up to eight LED strips are supported.
    Ctrl+Shift+B
    ```
 
-   From a terminal, run the two targets in sequence instead:
+   Or else from a terminal, run the two targets in sequence instead:
 
    ```bash
    platformio run --target upload
