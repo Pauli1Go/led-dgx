@@ -14,6 +14,8 @@
 constexpr uint8_t OFFLINE_UTILIZATION = 255;
 constexpr uint8_t IDLE_UTILIZATION_MAX = 5;
 constexpr uint8_t MAX_CONSECUTIVE_FETCH_FAILURES = 5;
+constexpr uint8_t MAX_ALL_FETCH_FAILURE_CYCLES = 5;
+constexpr uint8_t MAX_WIFI_RECOVERY_ATTEMPTS = 3;
 constexpr uint16_t HTTP_TIMEOUT_MS = 4000;
 constexpr char GPU_UTILIZATION_METRIC[] = "DCGM_FI_DEV_GPU_UTIL";
 constexpr uint16_t RUNNING_BASE_SPEED = 60;
@@ -29,6 +31,8 @@ uint8_t zoneUtilizations[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP] = {};
 uint8_t consecutiveFetchFailures[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP] = {};
 uint16_t runningZonePhases[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP] = {};
 uint8_t configuredStripCount = 0;
+uint8_t consecutiveAllFetchFailureCycles = 0;
+uint8_t wifiRecoveryAttempts = 0;
 unsigned long lastStatusRefresh = 0;
 unsigned long lastAnimationPhaseUpdate = 0;
 bool statusRefreshDue = true;
@@ -187,11 +191,13 @@ bool fetchDgxUtilization(const char* url, uint8_t& utilization) {
     HTTPClient http;
     http.setTimeout(HTTP_TIMEOUT_MS);
     if (!http.begin(url)) {
+        Serial.printf("DGX request could not start: %s\n", url);
         return false;
     }
 
     const int responseCode = http.GET();
     if (responseCode != HTTP_CODE_OK) {
+        Serial.printf("DGX request failed (%d): %s\n", responseCode, url);
         http.end();
         return false;
     }
@@ -242,6 +248,7 @@ bool fetchDgxUtilization(const char* url, uint8_t& utilization) {
     }
 
     if (gpuCount == 0) {
+        Serial.printf("DGX response contained no GPU utilization: %s\n", url);
         return false;
     }
 
@@ -259,6 +266,8 @@ uint8_t createExampleUtilization() {
 
 void refreshZoneUtilizations() {
     uint8_t refreshedUtilizations[MAX_LED_STRIPS][DGX_SPARKS_PER_STRIP] = {};
+    uint8_t configuredEndpointCount = 0;
+    uint8_t successfulFetchCount = 0;
     portENTER_CRITICAL(&zoneUtilizationsMux);
     memcpy(refreshedUtilizations, zoneUtilizations, sizeof(refreshedUtilizations));
     portEXIT_CRITICAL(&zoneUtilizationsMux);
@@ -276,13 +285,48 @@ void refreshZoneUtilizations() {
             for (uint8_t dgxIndex = 0; dgxIndex < DGX_SPARKS_PER_STRIP; dgxIndex++) {
                 uint8_t utilization = 0;
                 const char* url = appConfig.strips[stripIndex].dgxUrls[dgxIndex];
+                if (url[0] != '\0') {
+                    configuredEndpointCount++;
+                }
                 if (url[0] != '\0' && fetchDgxUtilization(url, utilization)) {
                     refreshedUtilizations[stripIndex][dgxIndex] = utilization;
                     consecutiveFetchFailures[stripIndex][dgxIndex] = 0;
+                    successfulFetchCount++;
                 } else if (url[0] == '\0' ||
                            ++consecutiveFetchFailures[stripIndex][dgxIndex] >= MAX_CONSECUTIVE_FETCH_FAILURES) {
                     refreshedUtilizations[stripIndex][dgxIndex] = OFFLINE_UTILIZATION;
                 }
+            }
+        }
+    }
+
+    if (!RUN_WITH_EXAMPLE_VALUES) {
+        if (configuredEndpointCount == 0 || successfulFetchCount > 0) {
+            consecutiveAllFetchFailureCycles = 0;
+            wifiRecoveryAttempts = 0;
+        } else {
+            consecutiveAllFetchFailureCycles++;
+            Serial.printf(
+                    "All %u DGX requests failed (cycle %u/%u, WiFi status %d).\n",
+                    configuredEndpointCount,
+                    consecutiveAllFetchFailureCycles,
+                    MAX_ALL_FETCH_FAILURE_CYCLES,
+                    static_cast<int>(WiFi.status()));
+
+            if (consecutiveAllFetchFailureCycles >= MAX_ALL_FETCH_FAILURE_CYCLES) {
+                consecutiveAllFetchFailureCycles = 0;
+                if (wifiRecoveryAttempts >= MAX_WIFI_RECOVERY_ATTEMPTS) {
+                    Serial.println("WiFi recovery failed repeatedly. Restarting ESP32.");
+                    Serial.flush();
+                    ESP.restart();
+                }
+
+                wifiRecoveryAttempts++;
+                Serial.printf(
+                        "WiFi recovery attempt %u/%u.\n",
+                        wifiRecoveryAttempts,
+                        MAX_WIFI_RECOVERY_ATTEMPTS);
+                recoverWiFiConnection();
             }
         }
     }

@@ -4,4 +4,5 @@
 
 void beginWebUi(AppConfig& config);
 void handleWebUi();
+void recoverWiFiConnection();
 bool webUiRestartRequested();

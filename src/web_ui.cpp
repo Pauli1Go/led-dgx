@@ -270,6 +270,17 @@ void handleWebUi() {
   WiFi.reconnect();
 }
 
+void recoverWiFiConnection() {
+  Serial.printf("Reinitializing WiFi (status %d).\n", static_cast<int>(WiFi.status()));
+  wifiWasConnected = false;
+  WiFi.disconnect(false, false);
+  delay(100);
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  lastWifiReconnect = millis();
+}
+
 bool webUiRestartRequested() {
   return restartRequested && static_cast<int32_t>(millis() - restartAt) >= 0;
 }
