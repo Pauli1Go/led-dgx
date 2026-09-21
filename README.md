@@ -33,7 +33,7 @@ Replace `<DGX-IP-ADDRESS>` with the IP address of the DGX system. The ESP32 eval
 
 ## LED display
 
-Each LED strip has two zones with 13 LEDs each. Each zone is assigned to one DGX endpoint.
+Each LED strip has two zones with half of the LEDs each. Each zone is assigned to one DGX endpoint.
 
 | State | Display |
 | --- | --- |
@@ -68,7 +68,7 @@ Up to eight LED strips are supported.
    Ctrl+Shift+B
    ```
 
-   From a terminal, run the two targets in sequence instead:
+   Or else from a terminal, run the two targets in sequence instead:
 
    ```bash
    platformio run --target upload
